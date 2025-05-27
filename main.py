@@ -116,6 +116,21 @@ class NginxManager:
         subprocess.run(["nginx", "-s", "reload"], check=True)
         print("✅ Applied!\n")
 
+    def delete_config(self, domain):
+        avail_f = self.avail / f"{domain}.conf"
+        if not avail_f.exists():
+            print(f"⚠️  {domain}.conf not found.")
+            return
+        enabled_f = self.enabled / avail_f.name
+        if enabled_f.exists():
+            enabled_f.unlink()
+            print(f"[-] Disabled: {enabled_f}")
+        avail_f.unlink()
+        print(f"[-] Removed: {avail_f}")
+        subprocess.run(["nginx", "-t"], check=True)
+        subprocess.run(["nginx", "-s", "reload"], check=True)
+        print("✅ Configuration removed!\n")
+
 
 class CLI:
     def __init__(self):
@@ -195,18 +210,30 @@ class CLI:
 
         self.manager.write_and_enable(domain, full_conf)
 
+    def delete_config(self):
+        print("\n=== Delete an Existing Nginx Config ===")
+        self.manager.list_configs()
+        domain = self.prompt("Enter config name to delete (without .conf)")
+        if not self.confirm(f"Are you sure you want to delete {domain}.conf?", default=False):
+            print("Canceled.\n")
+            return
+        self.manager.delete_config(domain)
+
     def main_loop(self):
         self.manager.require_root()
         while True:
             print("=== Nginx Interactive Manager ===")
             print("1) List configs")
             print("2) Create config")
-            print("3) Quit")
-            choice = self.prompt("Choice", "3")
+            print("3) Delete config")
+            print("4) Quit")
+            choice = self.prompt("Choice", "4")
             if choice == "1":
                 self.manager.list_configs()
             elif choice == "2":
                 self.create_config()
+            elif choice == "3":
+                self.delete_config()
             else:
                 print("Goodbye!")
                 break
