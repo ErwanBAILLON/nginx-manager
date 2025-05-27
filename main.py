@@ -74,9 +74,9 @@ def main():
             "Quit"
         ]).ask()
 
-    if action == "Lister les configs existantes":
+    if action == "List existing configurations":
         list_configs()
-    elif action == "Créer une nouvelle config":
+    elif action == "Create a new configuration":
         cfg = ask_basic()
         locs = ask_locations()
         conf_text = build_conf(cfg, locs)
