@@ -2,6 +2,7 @@
 import os
 import sys
 import subprocess
+import re
 from pathlib import Path
 
 SITES_AVAILABLE = Path("/etc/nginx/sites-available")
@@ -83,10 +84,21 @@ class NginxManager:
         print("\n--- Existing Nginx Configs ---")
         confs = sorted(self.avail.glob("*.conf"))
         if not confs:
-            print("  (none)")
-        else:
-            for c in confs:
-                print("  •", c.name)
+            print("  (none)\n")
+            return
+
+        # Table header
+        print(f"{'FILE':<20} {'DOMAIN':<25} {'PORT':<6} {'TYPE':<7} {'SSL':<5}")
+        print("-" * 65)
+        for conf in confs:
+            content = conf.read_text()
+            m_name = re.search(r"server_name\s+([^;]+);", content)
+            domain = m_name.group(1) if m_name else "-"
+            m_listen = re.search(r"listen\s+([\d]+)", content)
+            port = m_listen.group(1) if m_listen else "-"
+            typ = "proxy" if "proxy_pass" in content else "static"
+            ssl = "yes" if "ssl_certificate" in content else "no"
+            print(f"{conf.name:<20} {domain:<25} {port:<6} {typ:<7} {ssl:<5}")
         print()
 
     def write_and_enable(self, domain, full_conf):
