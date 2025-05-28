@@ -30,7 +30,6 @@ class NginxConfigBuilder:
 
     def build(self, domain, cfg, locations, ssl=False, redirect=False):
         lines = []
-        # Redirect block
         if redirect:
             lines.extend([
                 "server {",
@@ -42,11 +41,9 @@ class NginxConfigBuilder:
             ])
             return "\n".join(lines)
 
-        # Main server block
         lines.append("server {")
         lines.append(f"    listen {cfg['listen']};")
         lines.append(f"    server_name {domain};")
-        # Root or proxy
         if cfg['mode'] == 'proxy':
             lines.append(f"    location {cfg['path']} {{")
             lines.append(f"        proxy_pass {cfg['proxy_pass']};")
@@ -56,17 +53,14 @@ class NginxConfigBuilder:
         else:
             lines.append(f"    root {cfg['root']};")
             lines.append(f"    index {cfg['index']};")
-        # Additional location blocks
         for loc in locations:
             lines.append(f"    location {loc['path']} {{")
             for d, v in loc['directives']:
                 lines.append(f"        {d} {v};")
             lines.append("    }")
-        # SSL configuration (after locations)
         if ssl:
             for k, tpl in self.CERTBOT_SSL_BLOCK:
                 val = tpl.format(domain=domain)
-                # skip include/dhparam if file is missing
                 if k in ("include", "ssl_dhparam") and not Path(val).exists():
                     continue
                 lines.append(f"    {k} {val}; # managed by Certbot")
@@ -91,7 +85,6 @@ class NginxManager:
             print("  (none)\n")
             return
 
-        # Table header
         print(f"{'FILE':<20} {'DOMAIN':<25} {'PORT':<6} {'TYPE':<7} {'SSL':<5}")
         print("-" * 65)
         for conf in confs:
@@ -179,7 +172,6 @@ class CLI:
 
     def create_config(self):
         print("\n=== Create a New Nginx Config ===")
-        # require non-empty domain
         while True:
             domain = self.prompt("Enter primary domain (e.g. example.com)")
             if domain:
@@ -187,7 +179,6 @@ class CLI:
             print("⚠️  Domain cannot be empty.")
         cfg = {}
         cfg['listen'] = self.prompt("Enter listening port", "80")
-        # Choose mode: static or proxy
         mode = self.prompt("Mode? 1=proxy, 2=static (serve files)", "1")
         if mode == '1':
             cfg['mode'] = 'proxy'
@@ -198,7 +189,6 @@ class CLI:
             cfg['root'] = self.prompt("Enter site root directory", "/var/www/html")
             cfg['index'] = self.prompt("Enter index file(s)", "index.html")
 
-        # Additional custom location blocks
         locations = []
         while self.confirm("Add additional location block?", default=False):
             path = self.prompt("  Location path", "/api")
@@ -217,7 +207,6 @@ class CLI:
         if use_ssl:
             add_redirect = self.confirm("Also generate HTTP->HTTPS redirect block?", default=True)
 
-        # Build blocks
         server_conf = self.builder.build(domain, cfg, locations, ssl=use_ssl, redirect=False)
         blocks = [server_conf]
         if add_redirect:
@@ -234,7 +223,6 @@ class CLI:
 
         self.manager.write_and_enable(domain, full_conf)
 
-        # If SSL placeholders were used, offer to run Certbot now
         if use_ssl and self.confirm("Run Certbot now? (will execute: sudo certbot --nginx -d {})".format(domain), default=True):
             self.manager.obtain_cert(domain)
 
