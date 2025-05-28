@@ -44,12 +44,8 @@ class NginxConfigBuilder:
 
         # Main server block
         lines.append("server {")
-        lines.append(f"    server_name {domain};")
         lines.append(f"    listen {cfg['listen']};")
-        # SSL part
-        if ssl:
-            for k, tpl in self.CERTBOT_SSL_BLOCK:
-                lines.append(f"    {k} {tpl.format(domain=domain)}; # certbot")
+        lines.append(f"    server_name {domain};")
         # Root or proxy
         if cfg['mode'] == 'proxy':
             lines.append(f"    location {cfg['path']} {{")
@@ -66,6 +62,14 @@ class NginxConfigBuilder:
             for d, v in loc['directives']:
                 lines.append(f"        {d} {v};")
             lines.append("    }")
+        # SSL configuration (after locations)
+        if ssl:
+            for k, tpl in self.CERTBOT_SSL_BLOCK:
+                val = tpl.format(domain=domain)
+                # skip include/dhparam if file is missing
+                if k in ("include", "ssl_dhparam") and not Path(val).exists():
+                    continue
+                lines.append(f"    {k} {val}; # managed by Certbot")
         lines.append("}")
         return "\n".join(lines)
 
@@ -140,6 +144,12 @@ class NginxManager:
         print(conf_file.read_text())
         print()
 
+    def obtain_cert(self, domain):
+        print(f"\nRunning Certbot for {domain}...")
+        cmd = ["sudo", "certbot", "--nginx", "-d", domain]
+        subprocess.run(cmd, check=True)
+        print("✅ Certbot completed.\n")
+
 
 class CLI:
     def __init__(self):
@@ -169,7 +179,12 @@ class CLI:
 
     def create_config(self):
         print("\n=== Create a New Nginx Config ===")
-        domain = self.prompt("Enter primary domain (e.g. example.com)")
+        # require non-empty domain
+        while True:
+            domain = self.prompt("Enter primary domain (e.g. example.com)")
+            if domain:
+                break
+            print("⚠️  Domain cannot be empty.")
         cfg = {}
         cfg['listen'] = self.prompt("Enter listening port", "80")
         # Choose mode: static or proxy
@@ -219,10 +234,17 @@ class CLI:
 
         self.manager.write_and_enable(domain, full_conf)
 
+        # If SSL placeholders were used, offer to run Certbot now
+        if use_ssl and self.confirm("Run Certbot now? (will execute: sudo certbot --nginx -d {})".format(domain), default=True):
+            self.manager.obtain_cert(domain)
+
     def delete_config(self):
         print("\n=== Delete an Existing Nginx Config ===")
         self.manager.list_configs()
         domain = self.prompt("Enter config name to delete (without .conf)")
+        if not domain:
+            print("⚠️  No config name provided. Canceling.\n")
+            return
         if not self.confirm(f"Are you sure you want to delete {domain}.conf?", default=False):
             print("Canceled.\n")
             return
@@ -232,6 +254,9 @@ class CLI:
         print("\n=== View Nginx Config Details ===")
         self.manager.list_configs()
         domain = self.prompt("Enter config name to view (without .conf)")
+        if not domain:
+            print("⚠️  No config name provided.\n")
+            return
         self.manager.show_config(domain)
 
     def main_loop(self):
