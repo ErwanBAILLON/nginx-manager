@@ -131,6 +131,15 @@ class NginxManager:
         subprocess.run(["nginx", "-s", "reload"], check=True)
         print("✅ Configuration removed!\n")
 
+    def show_config(self, domain):
+        conf_file = self.avail / f"{domain}.conf"
+        if not conf_file.exists():
+            print(f"⚠️  {domain}.conf not found.\n")
+            return
+        print(f"\n--- {domain}.conf content ---\n")
+        print(conf_file.read_text())
+        print()
+
 
 class CLI:
     def __init__(self):
@@ -219,20 +228,30 @@ class CLI:
             return
         self.manager.delete_config(domain)
 
+    def show_config(self):
+        print("\n=== View Nginx Config Details ===")
+        self.manager.list_configs()
+        domain = self.prompt("Enter config name to view (without .conf)")
+        self.manager.show_config(domain)
+
     def main_loop(self):
         self.manager.require_root()
         while True:
             print("=== Nginx Interactive Manager ===")
             print("1) List configs")
             print("2) Create config")
-            print("3) Delete config")
-            print("4) Quit")
-            choice = self.prompt("Choice", "4")
+            print("3) Show config details")
+            print("4) Delete config")
+            print("5) Quit")
+            choice = self.prompt("Choice", "5")
+
             if choice == "1":
                 self.manager.list_configs()
             elif choice == "2":
                 self.create_config()
             elif choice == "3":
+                self.show_config()
+            elif choice == "4":
                 self.delete_config()
             else:
                 print("Goodbye!")
