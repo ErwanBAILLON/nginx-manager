@@ -1,3 +1,5 @@
+version: '3'
+
 services:
   nginx-manager:
     build: .
@@ -6,11 +8,23 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./sites-available:/etc/nginx/sites-available
-      - ./sites-enabled:/etc/nginx/sites-enabled
-      - ./logs:/var/log/nginx
+      # Use named volumes for better persistence
+      - nginx-sites-available:/etc/nginx/sites-available
+      - nginx-sites-enabled:/etc/nginx/sites-enabled
+      - nginx-logs:/var/log/nginx
+      - letsencrypt:/etc/letsencrypt
       - .:/app
+    environment:
+      - TZ=UTC
     cap_add:
-      - NET_BIND_SERVICE
+      - NET_ADMIN  # For network commands
+      - NET_BIND_SERVICE  # For binding to ports < 1024
     stdin_open: true
     tty: true
+    restart: unless-stopped
+
+volumes:
+  nginx-sites-available:
+  nginx-sites-enabled:
+  nginx-logs:
+  letsencrypt:
