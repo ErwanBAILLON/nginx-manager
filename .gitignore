@@ -1,2 +1,8 @@
 .venv
 venv
+logs/
+*.log
+*.pyc
+__pycache__/
+sites-available/
+sites-enabled/

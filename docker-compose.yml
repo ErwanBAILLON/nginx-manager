@@ -1,0 +1,16 @@
+services:
+  nginx-manager:
+    build: .
+    container_name: nginx-manager
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./sites-available:/etc/nginx/sites-available
+      - ./sites-enabled:/etc/nginx/sites-enabled
+      - ./logs:/var/log/nginx
+      - .:/app
+    cap_add:
+      - NET_BIND_SERVICE
+    stdin_open: true
+    tty: true
