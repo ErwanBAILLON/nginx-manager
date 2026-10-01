@@ -48,8 +48,15 @@ an interactive menu built on the same code, and a real test suite that runs `ngi
   snippet included in the server block and in every location, so a location-level `add_header`
   no longer silently drops them. HSTS is opt-in (`--hsts`), without `preload`.
 - `listen 443 ssl http2` (deprecated since nginx 1.25.1) is emitted only for older nginx;
-  1.25.1+ gets `listen 443 ssl;` + `http2 on;`. OCSP stapling uses the resolvers from
-  `/etc/resolv.conf` (or `--resolver`) instead of a hardcoded Google DNS.
+  1.25.1+ gets `listen 443 ssl;` + `http2 on;`. OCSP stapling is opt-in (`--ocsp-stapling`)
+  because Let's Encrypt removed OCSP URLs from its certificates in May 2025 and shut down its
+  responders in August 2025: enabling it by default only produced `"ssl_stapling" ignored`
+  warnings on every `nginx -t`. When enabled, the resolver comes from `/etc/resolv.conf` (or
+  `--resolver`) instead of a hardcoded Google DNS.
+- `doctor` reads the `ssl_certificate` directive of each TLS site instead of guessing a
+  Let's Encrypt path, so a hand-written vhost with a certificate under `/etc/ssl` no longer turns
+  the whole report red. A TLS site without the directive (certificate included from elsewhere)
+  is a warning.
 - `write_and_enable` had three nested symlink fallbacks and deleted files on failure. Writes are
   now atomic (temp file + `os.replace`), every replaced or removed file is backed up with a
   timestamp under `sites-available/.nginx-manager-backups/`, `nginx -t` runs before anything is

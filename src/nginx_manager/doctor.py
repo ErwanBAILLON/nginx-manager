@@ -130,17 +130,21 @@ def _certificate_checks(manager: Manager, now: datetime) -> list[Check]:
     for site in manager.list_sites():
         if not site.ssl:
             continue
-        spec = manager.load_spec(site.name)
-        cert = (
-            Path(spec.cert)
-            if spec and spec.cert
-            else (
-                manager.paths.letsencrypt_dir
-                / "live"
-                / (spec.domain if spec else site.name)
-                / "fullchain.pem"
+        # Use what the config actually says (ssl_certificate directive); a relative path
+        # is resolved against the nginx prefix like nginx does. Never guess a Let's
+        # Encrypt path for a hand-written site.
+        if site.cert_file is None:
+            out.append(
+                Check(
+                    WARN,
+                    f"certificate {site.name}",
+                    "no ssl_certificate directive in the file (inherited or included?)",
+                )
             )
-        )
+            continue
+        cert = Path(site.cert_file)
+        if not cert.is_absolute():
+            cert = manager.paths.root / cert
         if not cert.exists():
             out.append(Check(FAIL, f"certificate {site.name}", f"missing: {cert}"))
             continue

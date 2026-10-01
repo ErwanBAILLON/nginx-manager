@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from . import __version__
+from .errors import ValidationError
 from .spec import Location, SiteSpec
 
 SPEC_MARKER = "# nginx-manager-spec: "
@@ -140,17 +141,19 @@ def _ssl_block(spec: SiteSpec, ctx: RenderContext) -> list[str]:
         ]
     if ctx.ssl_dhparam_file:
         lines.append(f"ssl_dhparam {ctx.ssl_dhparam_file};")
-    resolvers = spec.resolvers or ctx.system_resolvers
-    if resolvers:
+    if spec.ocsp_stapling:
+        resolvers = spec.resolvers or ctx.system_resolvers
+        if not resolvers:
+            raise ValidationError(
+                "--ocsp-stapling needs a resolver: none found in /etc/resolv.conf, use --resolver"
+            )
         lines += [
-            "# OCSP stapling (resolver taken from /etc/resolv.conf unless --resolver is given)",
+            "# OCSP stapling (opt-in; resolver from /etc/resolv.conf unless --resolver is given)",
             "ssl_stapling on;",
             "ssl_stapling_verify on;",
             f"resolver {' '.join(resolvers)} valid=300s;",
             "resolver_timeout 5s;",
         ]
-    else:
-        lines.append("# OCSP stapling disabled: no resolver available")
     return lines
 
 

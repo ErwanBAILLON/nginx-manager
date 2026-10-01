@@ -124,11 +124,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rate-limit", metavar="RATE", help="limit_req per IP, e.g. 10r/s")
     p.add_argument("--rate-burst", type=int, default=20)
     p.add_argument(
+        "--ocsp-stapling",
+        action="store_true",
+        help="enable OCSP stapling (opt-in: useless with Let's Encrypt certs since 2025)",
+    )
+    p.add_argument(
         "--resolver",
         action="append",
         default=[],
         metavar="IP",
-        help="resolver for OCSP stapling (default: /etc/resolv.conf)",
+        help="resolver for --ocsp-stapling (default: /etc/resolv.conf)",
     )
     p.add_argument(
         "--certbot",
@@ -207,6 +212,7 @@ def spec_from_args(ns: argparse.Namespace) -> SiteSpec:
         key=ns.key,
         redirect_http=ns.redirect_http,
         hsts=ns.hsts,
+        ocsp_stapling=ns.ocsp_stapling,
         resolvers=list(ns.resolver),
         csp=ns.csp,
         rate_limit=ns.rate_limit,

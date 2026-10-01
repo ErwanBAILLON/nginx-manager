@@ -28,6 +28,7 @@ class SiteInfo:
     ssl: bool
     enabled: bool
     managed: bool
+    cert_file: str | None = None  # first ssl_certificate directive, as written
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -250,8 +251,11 @@ def parse_site(name: str, content: str, enabled: bool) -> SiteInfo:
         kind = "static"
     else:
         kind = "other"
-    ssl = bool(re.search(_D + r"ssl_certificate\s|" + _D + r"listen\s[^;]*\bssl\b", content, re.M))
-    return SiteInfo(name, names, ports, kind, ssl, enabled, managed)
+    cert_m = re.search(_D + r"ssl_certificate\s+([^;\s]+)\s*;", content, re.M)
+    ssl = cert_m is not None or bool(re.search(_D + r"listen\s[^;]*\bssl\b", content, re.M))
+    return SiteInfo(
+        name, names, ports, kind, ssl, enabled, managed, cert_m.group(1) if cert_m else None
+    )
 
 
 def explain(content: str) -> list[str]:

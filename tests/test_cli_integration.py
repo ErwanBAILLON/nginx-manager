@@ -20,6 +20,8 @@ def _nginx_t(run) -> None:  # type: ignore[no-untyped-def]
     rc, out, _ = run("test")
     assert rc == 0, out
     assert "test is successful" in out
+    # Generated configs must be clean: no "[warn]" (e.g. "ssl_stapling" ignored) on -t.
+    assert "[warn]" not in out, out
 
 
 def test_proxy_site_passes_nginx_t(run, root: Path) -> None:  # type: ignore[no-untyped-def]
@@ -83,6 +85,7 @@ def test_ssl_redirect_hsts_ratelimit(run, root: Path, selfsigned: tuple[Path, Pa
     assert "zone=nm_app_example_com:10m rate=10r/s;" in zones
     snippet = (root / "snippets" / "nginx-manager" / "app.example.com.headers.conf").read_text()
     assert "Strict-Transport-Security" in snippet and "Content-Security-Policy" in snippet
+    assert "ssl_stapling" not in out  # opt-in only (--ocsp-stapling)
     _nginx_t(run)
 
     # Replacing the site without rate limiting removes its zone and keeps a backup.
@@ -239,3 +242,30 @@ def test_version_and_missing_nginx(root: Path, capsys: pytest.CaptureFixture[str
     assert exc.value.code == 0
     rc = cli.main(["--root-dir", str(root), "--nginx-bin", "/nonexistent/nginx", "test"])
     assert rc == 6 and "nginx binary not found" in capsys.readouterr().err
+
+
+def test_ocsp_stapling_opt_in(run, root: Path, selfsigned: tuple[Path, Path]) -> None:  # type: ignore[no-untyped-def]
+    cert, key = selfsigned
+    ssl_args = ("--ssl", "--ssl-port", "8443", "--cert", str(cert), "--key", str(key))
+    rc, out, err = run(*PROXY, *ssl_args, "--ocsp-stapling", "--resolver", "127.0.0.1")
+    assert rc == 0, err
+    assert "ssl_stapling on;" in out and "resolver 127.0.0.1 valid=300s;" in out
+    rc, out, _ = run("test")
+    assert rc == 0, out
+    # A self-signed certificate has no OCSP responder: nginx accepts the config but warns.
+    # This is why stapling is opt-in; the default path (no --ocsp-stapling) stays warning-free.
+    assert '"ssl_stapling" ignored' in out
+
+
+def test_doctor_hand_written_tls_site(run, root: Path, selfsigned: tuple[Path, Path]) -> None:  # type: ignore[no-untyped-def]
+    cert, key = selfsigned
+    (root / "sites-available" / "hand.example.com.conf").write_text(
+        "server {\n    listen 8445 ssl;\n    server_name hand.example.com;\n"
+        f"    ssl_certificate {cert};\n    ssl_certificate_key {key};\n"
+        "    return 204;\n}\n"
+    )
+    assert run("enable", "hand.example.com")[0] == 0
+    rc, out, _ = run("doctor")
+    assert rc == 0, out
+    assert "certificate hand.example.com: expires" in out
+    assert "letsencrypt" not in out

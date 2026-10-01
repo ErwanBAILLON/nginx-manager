@@ -38,6 +38,9 @@ class SiteSpec:
     key: str | None = None
     redirect_http: bool = False
     hsts: bool = False
+    # OCSP stapling is opt-in: Let's Encrypt stopped including OCSP URLs in its
+    # certificates in May 2025, so stapling would only produce nginx warnings there.
+    ocsp_stapling: bool = False
     resolvers: list[str] = field(default_factory=list)
     # headers
     csp: str | None = None
@@ -86,8 +89,10 @@ class SiteSpec:
             self.key = v.absolute_path(self.key)
         if (self.cert is None) != (self.key is None):
             raise ValidationError("--cert and --key must be given together")
-        if not self.ssl and (self.redirect_http or self.hsts or self.cert):
-            raise ValidationError("--redirect-http, --hsts and --cert/--key require --ssl")
+        if not self.ssl and (self.redirect_http or self.hsts or self.cert or self.ocsp_stapling):
+            raise ValidationError(
+                "--redirect-http, --hsts, --ocsp-stapling and --cert/--key require --ssl"
+            )
         if self.csp is not None:
             self.csp = v.csp(self.csp)
         if self.rate_limit is not None:

@@ -206,13 +206,33 @@ def test_doctor_certificate_expiry(manager: Manager, selfsigned: tuple[Path, Pat
     unreadable.mkdir(parents=True)
     (unreadable / "fullchain.pem").write_text("not a cert\n")
     (manager.paths.sites_available / "bad.example.com.conf").write_text(
-        "server { listen 8444 ssl; ssl_certificate /x.pem; }\n"
+        f"server {{ listen 8444 ssl; ssl_certificate {unreadable}/fullchain.pem; }}\n"
+    )
+    # Regression: a hand-written TLS site with a certificate outside letsencrypt must be
+    # checked at the path its ssl_certificate directive gives, not at a guessed LE path.
+    (manager.paths.sites_available / "hand.example.com.conf").write_text(
+        "server {\n    listen 8445 ssl;\n    server_name hand.example.com;\n"
+        f"    ssl_certificate {cert};\n    ssl_certificate_key {key};\n}}\n"
+    )
+    # Relative paths are resolved against the nginx prefix, like nginx does.
+    (manager.paths.root / "rel.pem").write_bytes(cert.read_bytes())
+    (manager.paths.sites_available / "rel.example.com.conf").write_text(
+        "server { listen 8446 ssl; ssl_certificate rel.pem; }\n"
+    )
+    # TLS enabled but the certificate comes from an include or the http context.
+    (manager.paths.sites_available / "inc.example.com.conf").write_text(
+        "server { listen 8447 ssl; include /etc/nginx/snippets/tls.conf; }\n"
     )
     checks = {c.label: c for c in doctor.run_checks(fake)}
     assert checks["certificate app.example.com"].status == doctor.OK
     assert "expires" in checks["certificate app.example.com"].detail
     assert checks["certificate other.example.com"].status == doctor.FAIL
     assert checks["certificate bad.example.com"].status == doctor.WARN
+    assert checks["certificate hand.example.com"].status == doctor.OK
+    assert checks["certificate rel.example.com"].status == doctor.OK
+    assert checks["certificate inc.example.com"].status == doctor.WARN
+    assert "no ssl_certificate directive" in checks["certificate inc.example.com"].detail
+    assert "letsencrypt" not in checks["certificate hand.example.com"].detail
     # expired
     far = datetime(2099, 1, 1, tzinfo=timezone.utc)
     checks = {c.label: c for c in doctor.run_checks(fake, now=far)}

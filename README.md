@@ -83,6 +83,9 @@ warn  orphan log dir: /var/log/nginx/removed.example.com
 ```
 
 Exit code 1 when any check fails (missing nginx, broken symlink, expired certificate...).
+The certificate check reads the `ssl_certificate` directive of each TLS site (managed or
+hand-written); a site whose certificate comes from an include is reported as a warning, not a
+failure.
 
 ## What gets generated
 
@@ -121,11 +124,6 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;  # certbot's maintained TLS parameters
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-    # OCSP stapling (resolver taken from /etc/resolv.conf unless --resolver is given)
-    ssl_stapling on;
-    ssl_stapling_verify on;
-    resolver 127.0.0.53 valid=300s;
-    resolver_timeout 5s;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -165,6 +163,9 @@ that opted into `--rate-limit`. The file is regenerated on every create/delete.
 
 When certbot's `options-ssl-nginx.conf` is absent, an inline TLS 1.2/1.3 cipher set is emitted
 instead. When nginx is older than 1.25.1, `listen 443 ssl http2;` is used instead of `http2 on;`.
+OCSP stapling is opt-in (`--ocsp-stapling [--resolver IP]`, resolver from `/etc/resolv.conf` by
+default): Let's Encrypt stopped putting OCSP URLs in its certificates in 2025, so stapling on
+by default would only make `nginx -t` print `"ssl_stapling" ignored` on every reload.
 
 Static sites get `root`/`index`, `try_files $uri $uri/ =404`, 30-day caching for assets and a
 `deny all` on dotfiles (except `.well-known`).

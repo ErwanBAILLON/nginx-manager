@@ -146,10 +146,28 @@ def test_ssl_options_and_resolvers(fixed_ctx: RenderContext) -> None:
     assert "include /etc/letsencrypt/options-ssl-nginx.conf;" in out
     assert "ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;" in out
     assert "ssl_ciphers" not in out
+    # Resolvers are only emitted together with (opt-in) OCSP stapling.
+    assert "resolver " not in out and "ssl_stapling" not in out
+    out = templates.render_site(
+        proxy_spec(ssl=True, ocsp_stapling=True, resolvers=["1.1.1.1", "::1"]).validate(),
+        fixed_ctx,
+    )
     assert "resolver 1.1.1.1 [::1] valid=300s;" in out
+    assert "ssl_stapling on;" in out and "ssl_stapling_verify on;" in out
+    out = templates.render_site(proxy_spec(ssl=True, ocsp_stapling=True).validate(), fixed_ctx)
+    assert "resolver 127.0.0.53 valid=300s;" in out
     fixed_ctx.system_resolvers = []
+    with pytest.raises(ValidationError, match="resolver"):
+        templates.render_site(proxy_spec(ssl=True, ocsp_stapling=True).validate(), fixed_ctx)
+
+
+def test_ocsp_stapling_is_off_by_default(fixed_ctx: RenderContext) -> None:
+    """Regression: Let's Encrypt dropped OCSP in 2025, stapling on by default only warned."""
     out = templates.render_site(proxy_spec(ssl=True).validate(), fixed_ctx)
-    assert "ssl_stapling on" not in out and "OCSP stapling disabled" in out
+    assert "ssl_stapling" not in out
+    assert "resolver " not in out
+    with pytest.raises(ValidationError):
+        proxy_spec(ocsp_stapling=True).validate()  # requires ssl
 
 
 def test_no_websocket_and_no_obsolete_headers(fixed_ctx: RenderContext) -> None:
