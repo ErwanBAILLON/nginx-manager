@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install nginx and openssl (integration tests run the real nginx -t)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q nginx openssl
+          nginx -v
+      - name: Install package
+        run: python -m pip install -e '.[dev]'
+      - name: ruff
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+      - name: mypy
+        run: mypy
+      - name: pytest
+        run: pytest --cov --cov-report=term-missing --cov-fail-under=85
+      - name: CLI smoke test against a temp root
+        run: |
+          set -eu
+          R="$(mktemp -d)"
+          mkdir -p "$R/log" "$R/tmp"
+          cat > "$R/nginx.conf" <<EOF
+          pid $R/nginx.pid;
+          error_log $R/log/error.log;
+          events {}
+          http {
+            client_body_temp_path $R/tmp; proxy_temp_path $R/tmp; fastcgi_temp_path $R/tmp;
+            uwsgi_temp_path $R/tmp; scgi_temp_path $R/tmp;
+            include $R/conf.d/*.conf;
+            include $R/sites-enabled/*;
+          }
+          EOF
+          NM="nginx-manager --root-dir $R --no-reload"
+          $NM create app.example.com --proxy http://127.0.0.1:3000 --port 8080 --rate-limit 10r/s --yes
+          $NM list
+          $NM show app.example.com --explain
+          $NM disable app.example.com && $NM enable app.example.com
+          $NM test
+          $NM doctor || true
+          $NM delete app.example.com --yes
